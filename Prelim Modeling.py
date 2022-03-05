@@ -6,6 +6,8 @@ from transformers import TrainingArguments, Trainer
 from transformers import BertForSequenceClassification, BertTokenizer
 from transformers import TrainerCallback, EarlyStoppingCallback
 import json
+from sklearn.metrics import precision_recall_fscore_support, accuracy_score
+
  
 #read in data
 df = pd.read_csv('https://jacobdanovitch.blob.core.windows.net/datasets/twtc.csv')
@@ -49,6 +51,17 @@ arguments = TrainingArguments(
     seed=224
 )
 
+def compute_metrics(pred):
+    labels = pred.label_ids
+    preds = pred.predictions.argmax(-1)
+    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
+    acc = accuracy_score(labels, preds)
+    return {
+        'accuracy': acc,
+        'f1': f1,
+        'precision': precision,
+        'recall': recall
+    }
 
 # def compute_metrics(eval_pred):
 #     """Called at the end of validation. Gives accuracy"""
@@ -56,11 +69,11 @@ arguments = TrainingArguments(
 #     predictions = np.argmax(logits, axis=-1)
 #     # calculates the accuracy
 #     return {"accuracy": np.mean(predictions == labels)}
-def compute_metrics(eval_preds):
-    metric = load_metric("accuracy", "f1", "percision", "recall")
-    logits, labels = eval_preds
-    predictions = np.argmax(logits, axis=-1)
-    return metric.compute(predictions=predictions, references=labels)
+# def compute_metrics(eval_preds):
+#     metric = load_metric("accuracy", "f1", "percision", "recall")
+#     logits, labels = eval_preds
+#     predictions = np.argmax(logits, axis=-1)
+#     return metric.compute(predictions=predictions, references=labels)
 
 
 trainer = Trainer(
@@ -95,5 +108,5 @@ predictions = trainer.predict(test)
 
 preds = np.argmax(predictions.predictions, axis=-1)
 
-metric = load_metric("accuracy", "f1", "percision", "recall")
+metric = load_metric("glue", "mrpc")
 print(metric.compute(predictions=preds, references=test['label']))
