@@ -118,7 +118,7 @@ def run_mixup_experiments(lam=0.5):
     print(metric.compute(predictions=preds, references=test['label']))
 
 
-for lam in [0.2, 0.5, 0.8]:
+for lam in [0.1, 0.2, 0.3, 0.4, 0.5]:
     print(f"Starting experiment: MixUp w/ Lambda = {lam}")
     run_mixup_experiments(l=lam)
     print(f"Experiment finished")
