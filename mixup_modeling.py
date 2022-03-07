@@ -34,7 +34,7 @@ def compute_metrics(pred):
     }
 
 
-def mixup(row1, row2, label=1, l=0.5):
+def mixup(row1, row2, l, label=1):
     mixed = list(map(int, l * np.array(row1['input_ids'].iloc[0]) + (1 - l) * np.array(row2['input_ids'].iloc[0])))
     if sum(row1['attention_mask'].iloc[0]) > sum(row2['attention_mask'].iloc[0]):
         new_attention = row1['attention_mask'].iloc[0]
@@ -49,7 +49,20 @@ def mixup(row1, row2, label=1, l=0.5):
     }])
 
 
-def run_mixup_experiments(l=0.5):
+def mixup_aug(train, lam):
+    tokenized_train = pd.DataFrame(train)
+    pos = tokenized_train[tokenized_train["label"] == 1].copy(deep=True)
+    neg = tokenized_train[tokenized_train["label"] == 0].copy(deep=True)
+    for i in range(len(neg) - len(pos)):
+        row1 = pos.sample()
+        row2 = pos.sample()
+        new_embed = mixup(row1, row2, lam)
+        tokenized_train = tokenized_train.append(new_embed, ignore_index=True)
+    shuffle(tokenized_train)
+    return Dataset.from_pandas(tokenized_train)
+
+
+def run_mixup_experiments(lam=0.5):
     # read in data
     labeled = pd.read_csv('data/labeled_scouting.csv')
     test = pd.read_csv('data/augment/test.csv')
@@ -81,22 +94,11 @@ def run_mixup_experiments(l=0.5):
         load_best_model_at_end=True,
         seed=224
     )
-    # mix-up augmentation
-    tokenized_train = pd.DataFrame(train)
-    pos = tokenized_train[tokenized_train["label"] == 1].copy(deep=True)
-    neg = tokenized_train[tokenized_train["label"] == 0].copy(deep=True)
-    for i in range(len(neg) - len(pos)):
-        row1 = pos.sample()
-        row2 = pos.sample()
-        new_embed = mixup(row1, row2)
-        tokenized_train = tokenized_train.append(new_embed, ignore_index=True)
-    shuffle(tokenized_train)
-    train = Dataset.from_pandas(tokenized_train)
 
     trainer = Trainer(
         model=model,
         args=arguments,
-        train_dataset=train,
+        train_dataset=mixup_aug(train, lam),     # mix-up augmentation
         eval_dataset=test,
         tokenizer=tokenizer,
         compute_metrics=compute_metrics
@@ -117,5 +119,6 @@ def run_mixup_experiments(l=0.5):
 
 
 for lam in [0.2, 0.5, 0.8]:
-    print(f"Lambda: {lam}")
+    print(f"Starting experiment: MixUp w/ Lambda = {lam}")
     run_mixup_experiments(l=lam)
+    print(f"Experiment finished")
