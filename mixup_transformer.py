@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
+import random
 
 from torch.utils.data import TensorDataset, DataLoader
 from torch.nn.utils import clip_grad_norm_
@@ -11,7 +12,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_sc
 
 
 class MixUpTransformer(torch.nn.Module):     
-    def __init__(self, drop_rate=0.1, freeze_bert=False): 
+    def __init__(self, drop_rate=0.2, freeze_bert=False): 
         super(MixUpTransformer, self).__init__() 
         self.bert = BertModel.from_pretrained('bert-base-uncased')
         self.drop_rate=drop_rate
@@ -48,15 +49,44 @@ def compute_mixup(a, b, l):
     return l * np.array(a) + (1 - l) * np.array(b)
 
 
-def mixup_aug(input_ids, att_masks, labels, lam, n=50000):
+def get_example_idx(labels, target):
+    idx = np.random.randint(len(labels))
+    while labels[idx] != target:
+        idx = np.random.randint(len(labels))
+    return idx
+
+
+def gen_mixed_indices(labels, n=10000):
+    mixed = []
+    for i in range(n):
+        if i % 4 == 0:
+            # a = 0, b = 0
+            a = get_example_idx(labels, 0)
+            b = get_example_idx(labels, 0)
+        elif i % 4 == 1:
+            # a = 1, b = 0
+            a = get_example_idx(labels, 1)
+            b = get_example_idx(labels, 0)
+        elif i % 4 == 2:
+            # a = 0, b = 1
+            a = get_example_idx(labels, 0)
+            b = get_example_idx(labels, 1)
+        else:
+            # a = 1, b = 1
+            a = get_example_idx(labels, 1)
+            b = get_example_idx(labels, 1)
+        mixed.append((a, b))
+              
+    random.shuffle(mixed)
+    return mixed
+
+
+def mixup_aug(input_ids, att_masks, labels, lam):
     mixed_input_ids = []
     mixed_att_masks = []
     mixed_labels = []
     
-    for i in range(n):
-        a = np.random.randint(len(input_ids))
-        b = np.random.randint(len(input_ids))
-        
+    for a, b in gen_mixed_indices(labels):
         new_input = list(map(int, compute_mixup(input_ids[a], input_ids[b], lam)))
         new_att = att_masks[a] if sum(att_masks[a]) > sum(att_masks[b]) else att_masks[b]
         new_label = float(compute_mixup(labels[a], labels[b], lam))
@@ -80,11 +110,11 @@ def create_dataloaders(inputs, masks, labels, batch_size=16):
 
 
 def train_model(model, optimizer, scheduler, loss_function, epochs,       
-          train_dataloader, device, clip_value=2):
-    for epoch in range(epochs):
+          train_dataloader, device, clip_value=2, verbose=False):
+    for epoch in range(1, epochs + 1):
         print("Epoch", epoch)
         print("-----")
-        model.train()      
+        model.train()   
         for step, batch in enumerate(train_dataloader): 
             batch_inputs, batch_masks, batch_labels = \
                                tuple(b.to(device) for b in batch)
@@ -96,6 +126,10 @@ def train_model(model, optimizer, scheduler, loss_function, epochs,
             clip_grad_norm_(model.parameters(), clip_value)
             optimizer.step()
             scheduler.step()
+
+            if verbose and step % 100 == 0:
+                print(f"epoch {step * 100 / len(train_dataloader)} % done")
+        print(f"curr train loss = {loss}")
     return model
 
 
@@ -151,7 +185,7 @@ def run_mixup_experiment(lam=0.5):
     loss_function = torch.nn.MSELoss()
         
     trained_model = train_model(model, optimizer, scheduler, loss_function, epochs, 
-              train_dataloader, device)
+              train_dataloader, device, verbose=True)
 
     # evaluate
     test_pred = predict(trained_model, test_dataloader, device)
@@ -161,4 +195,4 @@ def run_mixup_experiment(lam=0.5):
 for lam in [0.1, 0.2, 0.3, 0.4, 0.5]:
     print(f"Starting experiment: MixUp w/ Lambda = {lam}")
     run_mixup_experiment(lam)
-    print(f"Experiment finished")
+    print(f"Experiment finished\n\n\n\n\n")
