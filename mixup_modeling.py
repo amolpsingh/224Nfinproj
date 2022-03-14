@@ -114,12 +114,12 @@ def run_mixup_experiments(lam=0.5):
 
     preds = np.argmax(predictions.predictions, axis=-1)
 
-    metric = load_metric("glue", "mrpc", "precision", "recall")
+    metric = load_metric("glue", "mrpc")
     print(metric.compute(predictions=preds, references=test['label']))
 
 
 metric = load_metric("glue", "mrpc")
-for lam in [0.1, 0.2, 0.3, 0.4, 0.5]:
+for lam in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]:
     print(f"Starting experiment: MixUp w/ Lambda = {lam}")
     run_mixup_experiments(lam)
     print(f"Experiment finished")
